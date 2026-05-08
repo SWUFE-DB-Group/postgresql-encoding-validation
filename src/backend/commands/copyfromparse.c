@@ -380,6 +380,8 @@ static void CopyConvertBuf(CopyFromState cstate) {
     int unverifiedlen = cstate->raw_buf_len - cstate->input_buf_len;
     int nverified;
 
+    CopyEncodingValidationPolicy validation_policy;
+
     if (unverifiedlen == 0) {
       /*
        * If no more raw data is coming, report the EOF to the caller.
@@ -394,10 +396,19 @@ static void CopyConvertBuf(CopyFromState cstate) {
      * previous round.
      */
 
-    ereport(NOTICE, (errmsg("copy encoding valiation = %d",
-                            copy_encoding_validation_policy)));
-    nverified = pg_encoding_verifymbstr(
-        cstate->file_encoding, cstate->raw_buf + preverifiedlen, unverifiedlen);
+    validation_policy =
+        (CopyEncodingValidationPolicy)copy_encoding_validation_policy;
+    switch (validation_policy) {
+    case COPY_ENCODING_VALIDATION_READ_COMPATIBLE:
+      nverified = pg_encoding_verifymbstr_read_compatible(
+          cstate->file_encoding, cstate->raw_buf + preverifiedlen,
+          unverifiedlen);
+      break;
+    default:
+      nverified = pg_encoding_verifymbstr(cstate->file_encoding,
+                                          cstate->raw_buf + preverifiedlen,
+                                          unverifiedlen);
+    }
     if (nverified == 0) {
       /*
        * Could not verify anything.
