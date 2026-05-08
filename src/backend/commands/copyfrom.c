@@ -74,8 +74,6 @@
  */
 #define MAX_PARTITION_BUFFERS 32
 
-int copy_encoding_validation_policy = COPY_ENCODING_VALIDATION_NATIVE;
-
 /* Stores multi-insert data related to a single relation in CopyFrom. */
 typedef struct CopyMultiInsertBuffer {
   TupleTableSlot *slots[MAX_BUFFERED_TUPLES]; /* Array to store tuples */

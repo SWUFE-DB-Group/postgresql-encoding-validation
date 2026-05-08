@@ -42,7 +42,6 @@
 #include "catalog/namespace.h"
 #include "catalog/storage.h"
 #include "commands/async.h"
-#include "commands/copy.h"
 #include "commands/event_trigger.h"
 #include "commands/extension.h"
 #include "commands/tablespace.h"
@@ -56,6 +55,7 @@
 #include "libpq/libpq.h"
 #include "libpq/oauth.h"
 #include "libpq/scram.h"
+#include "mb/pg_wchar.h"
 #include "nodes/queryjumble.h"
 #include "optimizer/cost.h"
 #include "optimizer/geqo.h"
@@ -119,9 +119,9 @@
  * NOTE! Option values may not contain double quotes!
  */
 
-static const struct config_enum_entry copy_encoding_validation_options[] = {
-    {"native", COPY_ENCODING_VALIDATION_NATIVE, false},
-    {"read_compatible", COPY_ENCODING_VALIDATION_READ_COMPATIBLE, false},
+static const struct config_enum_entry encoding_validation_options[] = {
+    {"native", ENCODING_VALIDATION_NATIVE, false},
+    {"read_compatible", ENCODING_VALIDATION_READ_COMPATIBLE, false},
     {NULL, 0, false}};
 
 static const struct config_enum_entry bytea_output_options[] = {
@@ -520,6 +520,8 @@ char *backtrace_functions;
 int temp_file_limit = -1;
 
 int num_temp_buffers = 1024;
+
+int encoding_validation_policy = ENCODING_VALIDATION_NATIVE;
 
 char *cluster_name = "";
 char *ConfigFileName;
@@ -5401,11 +5403,11 @@ struct config_enum ConfigureNamesEnum[] = {
      assign_io_method,
      NULL},
 
-    {{"copy_encoding_validation", PGC_USERSET, CLIENT_CONN_STATEMENT,
-      gettext_noop("Sets the encoding validation policy for COPY FROM."), NULL},
-     &copy_encoding_validation_policy,
-     COPY_ENCODING_VALIDATION_NATIVE,
-     copy_encoding_validation_options,
+    {{"encoding_validation", PGC_USERSET, CLIENT_CONN_STATEMENT,
+      gettext_noop("Sets the encoding validation policy."), NULL},
+     &encoding_validation_policy,
+     ENCODING_VALIDATION_NATIVE,
+     encoding_validation_options,
      NULL,
      NULL,
      NULL},

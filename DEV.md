@@ -1,7 +1,7 @@
 # ReSync Patch for PostgreSQL
 
 ```sql
-SHOW copy_encoding_validation;
-SET copy_encoding_validation = 'native';
-SET copy_encoding_validation = 'read_compatible';
+SHOW encoding_validation;
+SET encoding_validation = 'native';
+SET encoding_validation = 'read_compatible';
 ```

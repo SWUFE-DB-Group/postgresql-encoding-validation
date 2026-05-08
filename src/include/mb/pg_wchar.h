@@ -32,6 +32,20 @@ typedef unsigned int pg_wchar;
 #define MAX_MULTIBYTE_CHAR_LEN 4
 
 /*
+ * Policy for encoding validation. The default native policy uses PostgreSQL's
+ * existing verifier for each encoding. The read-compatible policy accepts
+ * byte sequences that PostgreSQL can read and convert without errors.
+ */
+typedef enum EncodingValidationPolicy {
+  ENCODING_VALIDATION_NATIVE,
+  ENCODING_VALIDATION_READ_COMPATIBLE,
+} EncodingValidationPolicy;
+
+#ifndef FRONTEND
+extern PGDLLIMPORT int encoding_validation_policy;
+#endif
+
+/*
  * various definitions for EUC
  */
 #define SS2 0x8e /* single shift 2 (JIS0201) */
@@ -653,8 +667,6 @@ extern int pg_encoding_mblen_bounded(int encoding, const char *mbstr);
 extern int pg_encoding_dsplen(int encoding, const char *mbstr);
 extern int pg_encoding_verifymbchar(int encoding, const char *mbstr, int len);
 extern int pg_encoding_verifymbstr(int encoding, const char *mbstr, int len);
-extern int pg_encoding_verifymbstr_read_compatible(int encoding,
-                                                   const char *mbstr, int len);
 extern int pg_encoding_max_length(int encoding);
 extern int pg_valid_client_encoding(const char *name);
 extern int pg_valid_server_encoding(const char *name);

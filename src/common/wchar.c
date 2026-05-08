@@ -66,7 +66,9 @@
   if ((len) < (need))                                                          \
   break
 
+#ifndef FRONTEND
 static int pg_euccn_verifystr_read_compatible(const unsigned char *s, int len);
+#endif
 
 /*
  * SQL/ASCII
@@ -1057,9 +1059,17 @@ static int pg_euckr_verifystr(const unsigned char *s, int len) {
   return s - start;
 }
 
-/* EUC-CN byte sequences are exactly same as EUC-KR */
+/* EUC-CN character byte sequences are exactly same as EUC-KR */
 #define pg_euccn_verifychar pg_euckr_verifychar
-#define pg_euccn_verifystr pg_euckr_verifystr
+
+static int pg_euccn_verifystr(const unsigned char *s, int len) {
+#ifndef FRONTEND
+  if (encoding_validation_policy == ENCODING_VALIDATION_READ_COMPATIBLE)
+    return pg_euccn_verifystr_read_compatible(s, len);
+#endif
+
+  return pg_euckr_verifystr(s, len);
+}
 
 static int pg_euctw_verifychar(const unsigned char *s, int len) {
   int l;
@@ -1987,24 +1997,6 @@ int pg_encoding_verifymbstr(int encoding, const char *mbstr, int len) {
 }
 
 /*
- * This is the `read_compatible` version of `pg_encoding_verifymbstr` (native).
- */
-int pg_encoding_verifymbstr_read_compatible(int encoding, const char *mbstr,
-                                            int len) {
-  if (!PG_VALID_ENCODING(encoding))
-    return pg_wchar_table[PG_SQL_ASCII].mbverifystr(
-        (const unsigned char *)mbstr, len);
-  switch (encoding) {
-  case PG_EUC_CN:
-    return pg_euccn_verifystr_read_compatible((const unsigned char *)mbstr,
-                                              len);
-  default:
-    return pg_wchar_table[encoding].mbverifystr((const unsigned char *)mbstr,
-                                                len);
-  }
-}
-
-/*
  * fetch maximum length of a given encoding
  */
 int pg_encoding_max_length(int encoding) {
@@ -2018,6 +2010,7 @@ int pg_encoding_max_length(int encoding) {
                                      : pg_wchar_table[PG_SQL_ASCII].maxmblen;
 }
 
+#ifndef FRONTEND
 static int pg_euccn_verifystr_read_compatible(const unsigned char *s, int len) {
   const unsigned char *start = s;
   while (len > 0) {
@@ -2062,3 +2055,4 @@ static int pg_euccn_verifystr_read_compatible(const unsigned char *s, int len) {
   }
   return s - start;
 }
+#endif

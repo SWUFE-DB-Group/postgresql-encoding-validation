@@ -19,17 +19,6 @@
 #include "parser/parse_node.h"
 #include "tcop/dest.h"
 
-/**
- * Represents the different encoding validation policies. The default one is
- * `native`.
- */
-typedef enum CopyEncodingValidationPolicy {
-  COPY_ENCODING_VALIDATION_NATIVE,
-  COPY_ENCODING_VALIDATION_READ_COMPATIBLE,
-} CopyEncodingValidationPolicy;
-
-extern PGDLLIMPORT int copy_encoding_validation_policy;
-
 /*
  * Represents whether a header line should be present, and whether it must
  * match the actual names (which implies "true").
