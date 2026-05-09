@@ -19,6 +19,7 @@
  *--------------------------------------------------------------------
  */
 #include "postgres.h"
+#include <stdbool.h>
 
 #ifdef HAVE_COPYFILE_H
 #include <copyfile.h>
@@ -122,6 +123,10 @@
 static const struct config_enum_entry encoding_validation_options[] = {
     {"native", ENCODING_VALIDATION_NATIVE, false},
     {"read_compatible", ENCODING_VALIDATION_READ_COMPATIBLE, false},
+    {"read_compatible_lookup", ENCODING_VALIDATION_READ_COMPATIBLE_LOOKUP,
+     false},
+    {"read_compatible_lookup_bit",
+     ENCODING_VALIDATION_READ_COMPATIBLE_LOOKUP_BIT, false},
     {NULL, 0, false}};
 
 static const struct config_enum_entry bytea_output_options[] = {

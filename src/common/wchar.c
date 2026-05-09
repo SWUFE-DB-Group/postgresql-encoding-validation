@@ -68,6 +68,10 @@
 
 #ifndef FRONTEND
 static int pg_euccn_verifystr_read_compatible(const unsigned char *s, int len);
+static int pg_euccn_verifystr_read_compatible_lookup(const unsigned char *s,
+                                                     int len);
+static int pg_euccn_verifystr_read_compatible_lookup_bit(const unsigned char *s,
+                                                         int len);
 #endif
 
 /*
@@ -1066,6 +1070,11 @@ static int pg_euccn_verifystr(const unsigned char *s, int len) {
 #ifndef FRONTEND
   if (encoding_validation_policy == ENCODING_VALIDATION_READ_COMPATIBLE)
     return pg_euccn_verifystr_read_compatible(s, len);
+  if (encoding_validation_policy == ENCODING_VALIDATION_READ_COMPATIBLE_LOOKUP)
+    return pg_euccn_verifystr_read_compatible_lookup(s, len);
+  if (encoding_validation_policy ==
+      ENCODING_VALIDATION_READ_COMPATIBLE_LOOKUP_BIT)
+    return pg_euccn_verifystr_read_compatible_lookup_bit(s, len);
 #endif
 
   return pg_euckr_verifystr(s, len);
@@ -2013,8 +2022,10 @@ int pg_encoding_max_length(int encoding) {
 #ifndef FRONTEND
 static int pg_euccn_verifystr_read_compatible(const unsigned char *s, int len) {
   const unsigned char *start = s;
+
   while (len > 0) {
     int _len;
+
     if (!IS_HIGHBIT_SET(*s)) {
       if (*s == '\0')
         break;
@@ -2022,15 +2033,18 @@ static int pg_euccn_verifystr_read_compatible(const unsigned char *s, int len) {
     } else {
       unsigned char c = *s;
       unsigned char next_c;
+
       /* 0x80..=0xA0 | 0xAA..=0xAF | 0xF8..=0xFF => invalid lead byte */
       if ((c >= 0x80 && c <= 0xA0) || (c >= 0xAA && c <= 0xAF) ||
           (c >= 0xF8 && c <= 0xFF))
         break;
       if (len < 2)
         break;
+
       next_c = *(s + 1);
       if (next_c < 0xA1 || next_c > 0xFE)
         break;
+
       /* Invalid two-byte combinations */
       if ((c == 0xA2 && (next_c >= 0xA1 && next_c <= 0xB0)) ||
           (c == 0xA2 && (next_c >= 0xE3 && next_c <= 0xE4)) ||
@@ -2048,11 +2062,1093 @@ static int pg_euccn_verifystr_read_compatible(const unsigned char *s, int len) {
           (c == 0xA9 && (next_c >= 0xF0 && next_c <= 0xFE)) ||
           (c == 0xD7 && (next_c >= 0xFA && next_c <= 0xFE)))
         break;
+
       _len = 2;
     }
+
     s += _len;
     len -= _len;
   }
+
+  return s - start;
+}
+
+#define EUCCN_READ_COMPAT_LEAD_MIN 0xA1
+#define EUCCN_READ_COMPAT_LEAD_MAX 0xF7
+#define EUCCN_READ_COMPAT_TRAIL_MIN 0xA1
+#define EUCCN_READ_COMPAT_TRAIL_MAX 0xFE
+
+static const bool pg_euccn_read_compatible_table[87][94] = {
+    /* lead 0xA1 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xA2 */
+    {false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  false, false, true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  false, false,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  false, false},
+    /* lead 0xA3 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xA4 */
+    {true,  true,  true,  true,  true,  true, true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true, true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true, true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true, true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true, true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true, true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true, true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true, false, false, false, false, false,
+     false, false, false, false, false, false},
+    /* lead 0xA5 */
+    {true,  true,  true,  true,  true,  true, true, true, true, true,  true,
+     true,  true,  true,  true,  true,  true, true, true, true, true,  true,
+     true,  true,  true,  true,  true,  true, true, true, true, true,  true,
+     true,  true,  true,  true,  true,  true, true, true, true, true,  true,
+     true,  true,  true,  true,  true,  true, true, true, true, true,  true,
+     true,  true,  true,  true,  true,  true, true, true, true, true,  true,
+     true,  true,  true,  true,  true,  true, true, true, true, true,  true,
+     true,  true,  true,  true,  true,  true, true, true, true, false, false,
+     false, false, false, false, false, false},
+    /* lead 0xA6 */
+    {true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  false, false, false, false, false, false,
+     false, false, true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xA7 */
+    {true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xA8 */
+    {true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  false, false, false, false,
+     false, false, false, false, false, false, true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xA9 */
+    {false, false, false, true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  true,
+     true,  true,  true,  true,  true,  true,  true,  true,  true,  false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xAA */
+    {false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xAB */
+    {false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xAC */
+    {false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xAD */
+    {false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xAE */
+    {false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xAF */
+    {false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false, false, false, false, false, false, false,
+     false, false, false, false},
+    /* lead 0xB0 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB1 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB2 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB3 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB4 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB5 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB6 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB7 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB8 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xB9 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xBA */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xBB */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xBC */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xBD */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xBE */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xBF */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC0 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC1 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC2 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC3 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC4 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC5 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC6 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC7 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC8 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xC9 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xCA */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xCB */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xCC */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xCD */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xCE */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xCF */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD0 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD1 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD2 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD3 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD4 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD5 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD6 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD7 */
+    {true, true, true, true, true, true,  true,  true,  true,  true, true, true,
+     true, true, true, true, true, true,  true,  true,  true,  true, true, true,
+     true, true, true, true, true, true,  true,  true,  true,  true, true, true,
+     true, true, true, true, true, true,  true,  true,  true,  true, true, true,
+     true, true, true, true, true, true,  true,  true,  true,  true, true, true,
+     true, true, true, true, true, true,  true,  true,  true,  true, true, true,
+     true, true, true, true, true, true,  true,  true,  true,  true, true, true,
+     true, true, true, true, true, false, false, false, false, false},
+    /* lead 0xD8 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xD9 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xDA */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xDB */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xDC */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xDD */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xDE */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xDF */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE0 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE1 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE2 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE3 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE4 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE5 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE6 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE7 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE8 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xE9 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xEA */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xEB */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xEC */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xED */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xEE */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xEF */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xF0 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xF1 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xF2 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xF3 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xF4 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xF5 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xF6 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true},
+    /* lead 0xF7 */
+    {true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true, true, true,
+     true, true, true, true, true, true, true, true, true, true}};
+
+static int pg_euccn_verifystr_read_compatible_lookup(const unsigned char *s,
+                                                     int len) {
+  const unsigned char *start = s;
+
+  while (len > 0) {
+    int l;
+
+    if (!IS_HIGHBIT_SET(*s)) {
+      if (*s == '\0')
+        break;
+      l = 1;
+    } else {
+      unsigned char c = *s;
+      unsigned char next_c;
+
+      if (c < EUCCN_READ_COMPAT_LEAD_MIN || c > EUCCN_READ_COMPAT_LEAD_MAX)
+        break;
+      if (len < 2)
+        break;
+
+      next_c = *(s + 1);
+      if (next_c < EUCCN_READ_COMPAT_TRAIL_MIN ||
+          next_c > EUCCN_READ_COMPAT_TRAIL_MAX)
+        break;
+      if (!pg_euccn_read_compatible_table[c - EUCCN_READ_COMPAT_LEAD_MIN]
+                                         [next_c - EUCCN_READ_COMPAT_TRAIL_MIN])
+        break;
+
+      l = 2;
+    }
+
+    s += l;
+    len -= l;
+  }
+
+  return s - start;
+}
+
+#define EUCCN_READ_COMPAT_LEAD_COUNT 87
+#define EUCCN_READ_COMPAT_TRAIL_COUNT 94
+#define EUCCN_READ_COMPAT_BYTES_PER_LEAD 12
+
+static const unsigned char pg_euccn_read_compatible_bits[87][12] = {
+    /* lead 0xA1 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xA2 */
+    {0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xF3, 0x3F, 0xFF, 0x0F},
+    /* lead 0xA3 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xA4 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x07, 0x00},
+    /* lead 0xA5 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F, 0x00},
+    /* lead 0xA6 */
+    {0xFF, 0xFF, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00},
+    /* lead 0xA7 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00},
+    /* lead 0xA8 */
+    {0xFF, 0xFF, 0xFF, 0x03, 0xF0, 0xFF, 0xFF, 0xFF, 0xFF, 0x01, 0x00, 0x00},
+    /* lead 0xA9 */
+    {0xF8, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F, 0x00, 0x00},
+    /* lead 0xAA */
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    /* lead 0xAB */
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    /* lead 0xAC */
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    /* lead 0xAD */
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    /* lead 0xAE */
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    /* lead 0xAF */
+    {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
+    /* lead 0xB0 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB1 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB2 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB3 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB4 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB5 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB6 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB7 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB8 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xB9 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xBA */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xBB */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xBC */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xBD */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xBE */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xBF */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC0 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC1 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC2 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC3 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC4 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC5 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC6 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC7 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC8 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xC9 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xCA */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xCB */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xCC */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xCD */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xCE */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xCF */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD0 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD1 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD2 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD3 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD4 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD5 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD6 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD7 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x01},
+    /* lead 0xD8 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xD9 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xDA */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xDB */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xDC */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xDD */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xDE */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xDF */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE0 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE1 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE2 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE3 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE4 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE5 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE6 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE7 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE8 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xE9 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xEA */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xEB */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xEC */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xED */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xEE */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xEF */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xF0 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xF1 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xF2 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xF3 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xF4 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xF5 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xF6 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F},
+    /* lead 0xF7 */
+    {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x3F}};
+
+static inline bool pg_euc_cn_read_compatible_bit_bool(int lead, int trail) {
+  unsigned int lead_offset = (unsigned int)(lead - EUCCN_READ_COMPAT_LEAD_MIN);
+  unsigned int trail_offset =
+      (unsigned int)(trail - EUCCN_READ_COMPAT_TRAIL_MIN);
+
+  if (lead_offset >= EUCCN_READ_COMPAT_LEAD_COUNT ||
+      trail_offset >= EUCCN_READ_COMPAT_TRAIL_COUNT)
+    return false;
+
+  return (pg_euccn_read_compatible_bits[lead_offset][trail_offset >> 3] &
+          (1U << (trail_offset & 7))) != 0;
+}
+
+static int pg_euccn_verifystr_read_compatible_lookup_bit(const unsigned char *s,
+                                                         int len) {
+  const unsigned char *start = s;
+
+  while (len > 0) {
+    int l;
+
+    if (!IS_HIGHBIT_SET(*s)) {
+      if (*s == '\0')
+        break;
+      l = 1;
+    } else {
+      unsigned char c = *s;
+      unsigned char next_c;
+
+      if (c < EUCCN_READ_COMPAT_LEAD_MIN || c > EUCCN_READ_COMPAT_LEAD_MAX)
+        break;
+      if (len < 2)
+        break;
+
+      next_c = *(s + 1);
+      if (!pg_euc_cn_read_compatible_bit_bool(c, next_c))
+        break;
+
+      l = 2;
+    }
+
+    s += l;
+    len -= l;
+  }
+
   return s - start;
 }
 #endif
