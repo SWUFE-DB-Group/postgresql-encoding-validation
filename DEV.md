@@ -8,7 +8,7 @@ git clone git@github.com:SWUFE-DB-Group/postgresql-encoding-validation.git
 
 ```bash
 meson setup build-release \
-  --prefix=/tmp/pg-install-release \
+  --prefix=/tmp/pg-dev-install \
   --buildtype=release \
   -Dcassert=false
 
